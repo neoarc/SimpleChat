@@ -1,0 +1,37 @@
+{
+  "allowedIPs": [
+    "127.0.0.1",
+    "::1"
+  ],
+
+  "profiles": {
+    "127.0.0.1": {
+      "name": "localhost",
+      "avatar": null
+    }	
+  },
+
+  "channels": [
+    { "id": "general", "type": "channel", "label": "일반", "desc": "일반 채팅" },
+    { "id": "todo",    "type": "channel", "label": "TO-DO", "desc": "TO-DO 리스트" },
+    { "id": "files",   "type": "channel", "label": "파일", "desc": "파일 전용 채널" },
+    { "id": "spam",    "type": "channel", "label": "spam", "desc": "아무거나 막 보내 보아요" }
+  ],
+
+  "port": 3000,
+  "fileSizeLimitMB": 10000,
+
+  "_tip_allowedIPs": [
+    "지원 형식:",
+    "  단일 IP     : '192.168.1.10'",
+    "  와일드카드  : '192.168.1.*'  또는  '192.168.*.*'",
+    "  범위        : '192.168.1.100-200'  (마지막 옥텟)",
+    "  콤마 목록   : '10.0.0.1,10.0.0.2,10.0.0.5'",
+    "  조합 가능   : '192.168.1.50-100,192.168.2.*'"
+  ],
+  "_tip_profiles": [
+    "profiles 형식: { 'IP': { name, avatar } }",
+    "  avatar: null 이면 이니셜 표시, 경로/URL이면 이미지 표시",
+    "  avatar 이미지는 uploads/ 폴더에 넣고 '/uploads/파일명' 으로 지정"
+  ]
+}

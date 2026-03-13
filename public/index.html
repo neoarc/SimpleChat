@@ -1,0 +1,1031 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>// VOID</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,300;0,400;0,500;1,300&family=Pretendard:wght@300;400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/9.1.6/marked.min.js"></script>
+<style>
+/* ════════════════════════════════════════
+   THEME DEFINITIONS
+   ════════════════════════════════════════ */
+
+/* ── 1. VOID — 기본 블랙 다크 테마 ── */
+:root,
+[data-theme="void"] {
+  --bg-0:#0a0a0f; --bg-1:#111118; --bg-2:#18181f; --bg-3:#1e1e27;
+  --border:#2a2a38; --border-hi:#3a3a52;
+  --accent:#7c6af7; --accent-dim:#3d3480; --accent-glow:rgba(124,106,247,.12);
+  --text-0:#e8e8f0; --text-1:#a0a0b8; --text-2:#7878a0; --text-dim:#545470;
+  --green:#4ade80; --red:#f87171; --cyan:#67e8f9; --yellow:#fbbf24;
+  --del-flash:rgba(248,113,113,.15);
+  --msg-me-bg:transparent; --msg-me-color:inherit; --msg-other-bg:transparent;
+  --input-bg:var(--bg-2); --scrollbar-thumb:var(--border);
+}
+
+/* ── 2. CLAUDE — claude.ai 다크 테마 ── */
+/* 실제 claude.ai 색상: bg #1a1a1a계열, 텍스트 흰색, accent #d4a853(금색) */
+[data-theme="claude"] {
+  --bg-0:#1a1a1a; --bg-1:#222222; --bg-2:#2a2a2a; --bg-3:#303030;
+  --border:#383838; --border-hi:#505050;
+  --accent:#d4a853; --accent-dim:#6b4e1a; --accent-glow:rgba(212,168,83,.12);
+  --text-0:#f5f5f5; --text-1:#c0c0c0; --text-2:#888888; --text-dim:#585858;
+  --green:#6ee7b7; --red:#fca5a5; --cyan:#93c5fd; --yellow:#fde68a;
+  --del-flash:rgba(252,165,165,.15);
+  --msg-me-bg:#2e2a20;   /* 내 말풍선: 금색 계열의 짙은 배경 */
+  --msg-me-color:#f5f5f5;
+  --msg-other-bg:#2a2a2a;
+  --input-bg:#222222; --scrollbar-thumb:#383838;
+}
+
+/* ── 3. OFFICE — 기업용 협업툴 라이트 테마 ── */
+/* 이미지 기반: 사이드바 #2d3748(어두운 슬레이트), 메시지 배경 흰색, 파란 말풍선 */
+[data-theme="office"] {
+  --bg-0:#f0f2f5; --bg-1:#ffffff; --bg-2:#f7f8fa; --bg-3:#edf0f3;
+  --border:#dde1e8; --border-hi:#b8c0cc;
+  --accent:#2563eb; --accent-dim:#dbeafe; --accent-glow:rgba(37,99,235,.10);
+  --text-0:#1e293b; --text-1:#475569; --text-2:#64748b; --text-dim:#94a3b8;
+  --green:#16a34a; --red:#dc2626; --cyan:#0284c7; --yellow:#d97706;
+  --del-flash:rgba(220,38,38,.10);
+  --msg-me-bg:#2563eb; --msg-me-color:#ffffff;
+  --msg-other-bg:#ffffff;
+  --input-bg:#ffffff; --scrollbar-thumb:#d1d5db;
+  /* 사이드바 전용 (이미지의 어두운 좌측 패널) */
+  --sb-bg:#2d3748; --sb-text:#e2e8f0; --sb-dim:#90a0b4;
+  --sb-border:#3d4f66; --sb-hover:rgba(255,255,255,.07); --sb-active:rgba(255,255,255,.12);
+}
+
+/* ════ BUBBLE MODE (claude / office) ════
+   핵심 구조:
+   msg-group (width:100%, display:flex, flex-direction:row)
+     └─ msg-body (max-width:70%, display:flex, flex-direction:column)
+          ├─ msg-meta  (이름 + 시간)
+          └─ msg-content (말풍선)
+
+   내 메시지: msg-group에 justify-content:flex-end → msg-body 전체가 오른쪽 끝에 붙음
+   상대 메시지: justify-content:flex-start (기본)
+   ════════════════════════════════════════ */
+[data-theme="claude"] .msg-group,
+[data-theme="office"] .msg-group {
+  display: flex;
+  flex-direction: row;      /* 가로 배치 유지 */
+  width: 100%;              /* 전체 너비 차지 */
+  padding: 3px 14px;
+  gap: 0;
+  background: transparent !important;  /* hover bg 제거 */
+}
+[data-theme="claude"] .msg-avatar,
+[data-theme="office"] .msg-avatar { display:none; }
+
+/* 상대 메시지: 왼쪽 정렬 */
+[data-theme="claude"] .msg-group:not([data-mine]),
+[data-theme="office"] .msg-group:not([data-mine]) {
+  justify-content: flex-start;
+}
+/* 내 메시지: 오른쪽 끝 정렬 ★ */
+[data-theme="claude"] .msg-group[data-mine],
+[data-theme="office"] .msg-group[data-mine] {
+  justify-content: flex-end;
+}
+
+/* msg-body: 말풍선+메타를 세로로 쌓는 컨테이너 */
+[data-theme="claude"] .msg-body,
+[data-theme="office"] .msg-body {
+  display: flex;
+  flex-direction: column;
+  max-width: 70%;
+  width: fit-content;       /* ★ 콘텐츠 너비에만 맞게 수축 */
+  min-width: 0;
+  flex: 0 0 auto;
+}
+
+/* 내 메시지 메타(이름+시간): 오른쪽 정렬 */
+[data-theme="claude"] .msg-group[data-mine] .msg-meta,
+[data-theme="office"] .msg-group[data-mine] .msg-meta {
+  flex-direction: row-reverse;
+  justify-content: flex-start;
+}
+
+/* ── 말풍선 본체 ── */
+/* 상대방 */
+[data-theme="claude"] .msg-content,
+[data-theme="office"] .msg-content {
+  background: var(--msg-other-bg);
+  border: 1px solid var(--border);
+  border-radius: 2px 14px 14px 14px;
+  padding: 8px 13px;
+  display: inline-block;
+  max-width: 100%;
+  word-break: break-word;
+}
+/* 내 말풍선 */
+[data-theme="claude"] .msg-group[data-mine] .msg-content,
+[data-theme="office"] .msg-group[data-mine] .msg-content {
+  background: var(--msg-me-bg);
+  color: var(--msg-me-color);
+  border-color: transparent;
+  border-radius: 14px 2px 14px 14px;
+}
+[data-theme="claude"] .msg-group[data-mine] .msg-content a,
+[data-theme="office"] .msg-group[data-mine] .msg-content a { color:inherit; opacity:.8; }
+[data-theme="claude"] .msg-group[data-mine] .msg-content code,
+[data-theme="office"] .msg-group[data-mine] .msg-content code { background:rgba(0,0,0,.25); color:inherit; }
+
+/* 호버 힌트 bubble 모드에선 숨김 */
+[data-theme="claude"] .msg-group::after,
+[data-theme="office"] .msg-group::after { display:none; }
+
+/* ── 작성자명 색상 ──
+   JS에서 inline style이 아닌 CSS custom property(--ip-color)로 색을 전달하므로
+   !important 없이도 아래 선택자가 우선적으로 적용됨 */
+/* office 라이트: 상대방 이름 → 검정 계열 고정 (밝은 배경이므로) */
+[data-theme="office"] .msg-author { color: var(--text-0); }
+/* office 내 말풍선 위 이름 → 반투명 흰색 */
+[data-theme="office"] .msg-group[data-mine] .msg-author { color: rgba(255,255,255,.8); }
+/* claude 내 말풍선 위 이름 → 반투명 흰색 */
+[data-theme="claude"] .msg-group[data-mine] .msg-author { color: rgba(245,245,245,.65); }
+
+/* ── OFFICE: 사이드바 어두운 패널 ── */
+[data-theme="office"] #sidebar { background:var(--sb-bg); border-right:1px solid var(--sb-border); }
+[data-theme="office"] #sidebar-header { border-bottom-color:var(--sb-border); }
+[data-theme="office"] .logo { color:#a78bfa; }
+[data-theme="office"] .tagline,
+[data-theme="office"] .section-label { color:var(--sb-dim); }
+[data-theme="office"] .ch-item { color:var(--sb-text); }
+[data-theme="office"] .ch-item:hover { background:var(--sb-hover); color:#fff; }
+[data-theme="office"] .ch-item.active { background:var(--sb-active); color:#fff; border-left-color:#a78bfa; }
+[data-theme="office"] #sidebar-footer { border-top-color:var(--sb-border); }
+[data-theme="office"] .usr-name { color:var(--sb-text); }
+[data-theme="office"] .usr-status { color:#68d391; }
+[data-theme="office"] #ws-dot { background:var(--sb-dim); }
+[data-theme="office"] #ws-dot.live { background:#68d391; }
+[data-theme="office"] #theme-gear { color:var(--sb-dim); }
+[data-theme="office"] #theme-gear:hover { color:var(--sb-text); background:var(--sb-hover); }
+/* ── OFFICE: 입력창 ── */
+[data-theme="office"] #input-box { background:var(--input-bg); border-color:var(--border); }
+[data-theme="office"] #msg-input { background:transparent; }
+[data-theme="office"] #input-area { background:var(--bg-1); padding-top:8px; }
+/* ── CLAUDE: accent ── */
+[data-theme="claude"] .logo { color:var(--accent); }
+[data-theme="claude"] .ch-item.active { color:var(--accent); border-left-color:var(--accent); }
+
+/* ═══════════════════════════════
+   THEME GEAR + POPOVER
+   ═══════════════════════════════ */
+#theme-gear {
+  background:none; border:none; cursor:pointer;
+  color:var(--text-dim); font-size:14px;
+  width:26px; height:26px; border-radius:5px;
+  display:flex; align-items:center; justify-content:center;
+  transition:color .12s, background .12s;
+  flex-shrink:0; position:relative;
+}
+#theme-gear:hover { color:var(--text-1); background:var(--bg-3); }
+
+#theme-popover {
+  display:none; position:absolute;
+  bottom:calc(100% + 8px); left:0;
+  background:var(--bg-2); border:1px solid var(--border-hi);
+  border-radius:10px; padding:8px;
+  box-shadow:0 8px 28px rgba(0,0,0,.4);
+  z-index:200; width:176px;
+}
+#theme-popover.open { display:block; animation:fadeUp .15s ease; }
+#tp-title {
+  font-size:9px; font-family:'IBM Plex Mono',monospace;
+  letter-spacing:.12em; color:var(--text-dim);
+  text-transform:uppercase; padding:2px 6px 7px;
+  border-bottom:1px solid var(--border); margin-bottom:6px;
+}
+.tp-item {
+  display:flex; align-items:center; gap:10px;
+  padding:7px 8px; border-radius:6px; cursor:pointer;
+  border:none; width:100%; background:none; text-align:left;
+  transition:background .1s;
+}
+.tp-item:hover { background:var(--bg-3); }
+.tp-item.active { background:var(--accent-glow); }
+.tp-swatch {
+  width:26px; height:18px; border-radius:4px; flex-shrink:0;
+  border:1px solid rgba(128,128,128,.25); overflow:hidden;
+  display:flex;
+}
+.tp-swatch span { flex:1; }
+.tp-info { display:flex; flex-direction:column; }
+.tp-label {
+  font-size:12px; font-family:'IBM Plex Mono',monospace;
+  color:var(--text-0); font-weight:500; line-height:1.2;
+}
+.tp-sub { font-size:10px; color:var(--text-2); margin-top:1px; }
+.tp-item.active .tp-label { color:var(--accent); }
+/* office 다크 사이드바에서 팝오버 색상 */
+[data-theme="office"] #theme-popover {
+  background:#3a4f68; border-color:#566880;
+  box-shadow:0 8px 28px rgba(0,0,0,.5);
+}
+[data-theme="office"] #tp-title { color:#90a0b4; border-bottom-color:#4a6080; }
+[data-theme="office"] .tp-item:hover { background:rgba(255,255,255,.08); }
+[data-theme="office"] .tp-item.active { background:rgba(255,255,255,.13); }
+[data-theme="office"] .tp-label { color:#e2e8f0; }
+[data-theme="office"] .tp-sub { color:#90a0b4; }
+[data-theme="office"] .tp-item.active .tp-label { color:#a78bfa; }
+
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Pretendard',sans-serif;background:var(--bg-0);color:var(--text-0);height:100vh;display:flex;overflow:hidden;}
+
+/* ── SIDEBAR ── */
+#sidebar{width:220px;min-width:220px;background:var(--bg-1);border-right:1px solid var(--border);display:flex;flex-direction:column;}
+#sidebar-header{padding:18px 16px 14px;border-bottom:1px solid var(--border);}
+.logo{font-family:'IBM Plex Mono',monospace;font-size:13px;font-weight:500;letter-spacing:.15em;color:var(--accent);text-transform:uppercase;}
+.tagline{font-size:10px;color:var(--text-dim);margin-top:3px;font-family:'IBM Plex Mono',monospace;}
+.section-label{font-size:10px;font-family:'IBM Plex Mono',monospace;letter-spacing:.1em;color:var(--text-dim);padding:14px 16px 5px;text-transform:uppercase;}
+.ch-item{display:flex;align-items:center;gap:8px;padding:6px 14px;cursor:pointer;font-size:13.5px;color:var(--text-1);transition:all .12s;border-left:2px solid transparent;}
+.ch-item:hover{background:var(--bg-2);color:var(--text-0);}
+.ch-item.active{background:var(--accent-glow);color:var(--accent);border-left-color:var(--accent);}
+.ch-sigil{font-family:'IBM Plex Mono',monospace;font-size:11px;opacity:.5;width:14px;flex-shrink:0;}
+.ch-unread{margin-left:auto;background:var(--accent);color:#fff;font-size:10px;padding:1px 5px;border-radius:8px;font-family:'IBM Plex Mono',monospace;display:none;}
+#sidebar-footer{margin-top:auto;padding:12px 14px;border-top:1px solid var(--border);display:flex;align-items:center;gap:9px;}
+.usr-avatar{width:30px;height:30px;background:var(--accent-dim);border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--accent);overflow:hidden;}
+.usr-name{font-size:12px;font-weight:500;font-family:'IBM Plex Mono',monospace;color:var(--text-1);}
+.usr-status{font-size:10px;color:var(--green);font-family:'IBM Plex Mono',monospace;}
+.usr-status::before{content:'● ';font-size:7px;}
+#ws-dot{margin-left:auto;width:7px;height:7px;border-radius:50%;background:var(--text-dim);transition:background .3s;flex-shrink:0;}
+#ws-dot.live{background:var(--green);}
+#ws-dot.err{background:var(--red);}
+
+/* ── MAIN ── */
+#main{flex:1;display:flex;flex-direction:column;overflow:hidden;}
+#topbar{height:48px;flex-shrink:0;background:var(--bg-1);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 18px;gap:10px;}
+#topbar-name{font-family:'IBM Plex Mono',monospace;font-size:14px;font-weight:500;}
+#topbar-desc{font-size:12px;color:var(--text-2);border-left:1px solid var(--border);padding-left:10px;margin-left:4px;}
+.tb-actions{margin-left:auto;display:flex;gap:6px;}
+.icon-btn{width:30px;height:30px;background:transparent;border:1px solid var(--border);border-radius:5px;color:var(--text-1);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:13px;transition:all .12s;}
+.icon-btn:hover{background:var(--bg-3);color:var(--text-0);border-color:var(--border-hi);}
+
+/* ── MESSAGES ── */
+#messages-wrap{flex:1;overflow:hidden;position:relative;}
+#messages-wrap.drag-over::after{
+  content:'여기에 파일을 놓으세요';position:absolute;inset:12px;
+  background:rgba(124,106,247,.1);border:2px dashed var(--accent);border-radius:8px;
+  display:flex;align-items:center;justify-content:center;
+  font-family:'IBM Plex Mono',monospace;font-size:15px;letter-spacing:.1em;color:var(--accent);
+  z-index:10;pointer-events:none;
+}
+#messages{height:100%;overflow-y:auto;padding:16px 18px 8px;display:flex;flex-direction:column;gap:1px;scroll-behavior:smooth;}
+#messages::-webkit-scrollbar{width:3px;}
+#messages::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px;}
+
+/* message */
+.msg-group{
+  display:flex;gap:11px;padding:4px 8px;border-radius:6px;
+  transition:background .1s;animation:fadeUp .18s ease;
+  position:relative;
+}
+.msg-group:hover{background:var(--bg-2);}
+.msg-group::after{
+  content:'Shift+클릭으로 삭제';
+  position:absolute;right:10px;top:50%;transform:translateY(-50%);
+  font-size:10px;font-family:'IBM Plex Mono',monospace;
+  color:var(--text-2);letter-spacing:.05em;
+  opacity:0;transition:opacity .15s;pointer-events:none;white-space:nowrap;
+}
+.msg-group:hover::after{opacity:1;}
+body.shift-held .msg-group:hover{background:var(--del-flash);cursor:pointer;}
+body.shift-held .msg-group:hover::after{color:var(--red);}
+@keyframes deleteFlash{0%{background:var(--del-flash);opacity:1}100%{opacity:0;transform:translateX(-8px)}}
+.msg-group.deleting{animation:deleteFlash .25s ease forwards;pointer-events:none;}
+
+.msg-avatar{width:34px;height:34px;border-radius:50%;flex-shrink:0;margin-top:2px;display:flex;align-items:center;justify-content:center;font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:500;background:var(--bg-3);cursor:default;user-select:none;overflow:hidden;}
+.msg-body{flex:1;min-width:0;}
+.msg-meta{display:flex;align-items:baseline;gap:8px;margin-bottom:3px;}
+.msg-author{font-size:12.5px;font-weight:600;font-family:'IBM Plex Mono',monospace;color:var(--ip-color,var(--accent));}
+/* 시간 — 이전 #50506a → 지금 var(--text-2) = #7878a0 로 훨씬 밝게 */
+.msg-time{font-size:11px;color:var(--text-2);font-family:'IBM Plex Mono',monospace;}
+
+.msg-content{font-size:13.5px;line-height:1.65;color:var(--text-0);word-break:break-word;}
+.msg-content p{margin-bottom:4px;}
+.msg-content p:last-child{margin-bottom:0;}
+.msg-content code{font-family:'IBM Plex Mono',monospace;font-size:12px;background:var(--bg-3);color:var(--cyan);padding:1px 5px;border-radius:3px;}
+.msg-content pre{background:var(--bg-3);border:1px solid var(--border);border-radius:6px;padding:12px;margin:6px 0;overflow-x:auto;}
+.msg-content pre code{background:none;padding:0;color:var(--cyan);font-size:12px;}
+.msg-content blockquote{border-left:3px solid var(--accent);padding-left:10px;margin:5px 0;color:var(--text-1);}
+.msg-content a{color:var(--accent);}
+.msg-content strong{color:var(--text-0);}
+.msg-content ul,.msg-content ol{padding-left:20px;margin:3px 0;}
+.msg-content h1,.msg-content h2,.msg-content h3{margin:6px 0 3px;font-size:1em;}
+
+/* file card */
+.file-card{display:inline-flex;align-items:center;gap:10px;background:var(--bg-2);border:1px solid var(--border);border-radius:7px;padding:9px 13px;margin-top:6px;max-width:340px;text-decoration:none;color:inherit;transition:border-color .12s,background .12s;position:relative;}
+.file-card:hover{border-color:var(--accent);background:var(--bg-3);}
+body.shift-held .file-card:hover{border-color:var(--red);background:rgba(248,113,113,.08);cursor:pointer;}
+body.shift-held .file-card:hover .file-dl{color:var(--red);}
+.file-icon{width:34px;height:34px;background:var(--accent-dim);border-radius:5px;display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0;}
+.file-info{flex:1;min-width:0;}
+.file-name{font-size:12.5px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.file-size{font-size:11px;color:var(--text-2);font-family:'IBM Plex Mono',monospace;margin-top:1px;}
+.file-dl{font-size:14px;color:var(--text-2);transition:color .12s;font-family:'IBM Plex Mono',monospace;}
+.file-card:hover .file-dl{color:var(--accent);}
+
+/* image */
+.img-wrap{display:inline-block;margin-top:6px;position:relative;}
+.img-preview{max-width:300px;max-height:220px;border-radius:6px;border:1px solid var(--border);cursor:pointer;transition:opacity .12s;display:block;}
+.img-preview:hover{opacity:.85;}
+body.shift-held .img-preview:hover{opacity:.5;outline:2px solid var(--red);border-radius:6px;}
+
+/* ── DATE DIVIDER — 날짜 텍스트도 밝게 ── */
+.date-divider{
+  text-align:center;font-size:11px;
+  font-family:'IBM Plex Mono',monospace;
+  /* 이전 var(--text-2)=#50506a → 지금 명시적으로 더 밝은 값 */
+  color:#8888aa;
+  padding:12px 0 6px;
+  display:flex;align-items:center;gap:12px;
+  user-select:none;
+}
+.date-divider::before,.date-divider::after{content:'';flex:1;height:1px;background:var(--border);}
+
+/* system */
+.msg-system{text-align:center;font-size:11px;color:var(--text-2);font-family:'IBM Plex Mono',monospace;padding:10px 0;display:flex;align-items:center;gap:12px;}
+.msg-system::before,.msg-system::after{content:'';flex:1;height:1px;background:var(--border);}
+.loading-dots{display:flex;gap:5px;padding:8px 18px;align-items:center;font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--text-2);}
+.loading-dots span{width:5px;height:5px;border-radius:50%;background:var(--text-2);animation:pulse .8s ease-in-out infinite;}
+.loading-dots span:nth-child(2){animation-delay:.15s;}
+.loading-dots span:nth-child(3){animation-delay:.3s;}
+
+/* ── INPUT ── */
+#input-area{padding:10px 18px 14px;flex-shrink:0;}
+#input-box{background:var(--bg-2);border:1px solid var(--border);border-radius:8px;display:flex;flex-direction:column;transition:border-color .2s,box-shadow .2s;}
+#input-box:focus-within{border-color:var(--accent-dim);box-shadow:0 0 0 3px rgba(124,106,247,.07);}
+#file-strip{display:none;flex-wrap:wrap;gap:6px;padding:9px 12px 0;border-bottom:1px solid var(--border);}
+#file-strip.has-files{display:flex;}
+.f-chip{display:flex;align-items:center;gap:5px;background:var(--bg-3);border:1px solid var(--border);border-radius:4px;padding:3px 7px;font-size:11px;color:var(--text-1);font-family:'IBM Plex Mono',monospace;max-width:190px;}
+.f-chip-name{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.f-chip-rm{cursor:pointer;color:var(--text-2);transition:color .1s;background:none;border:none;font-size:13px;line-height:1;}
+.f-chip-rm:hover{color:var(--red);}
+#input-row{display:flex;align-items:flex-end;gap:0;padding:7px 11px;}
+#attach-btn{background:none;border:none;color:var(--text-2);cursor:pointer;font-size:20px;padding:2px 8px 2px 0;transition:color .12s;align-self:flex-end;margin-bottom:3px;flex-shrink:0;}
+#attach-btn:hover{color:var(--accent);}
+#msg-input{flex:1;background:none;border:none;outline:none;font-family:'Pretendard',sans-serif;font-size:13.5px;color:var(--text-0);resize:none;max-height:180px;min-height:22px;line-height:1.6;padding:2px 0;}
+#msg-input::placeholder{color:var(--text-dim);}
+#send-btn{background:var(--accent);border:none;border-radius:6px;width:32px;height:32px;color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:14px;transition:all .12s;align-self:flex-end;flex-shrink:0;margin-left:8px;}
+#send-btn:hover{background:#9580ff;transform:scale(1.06);}
+#send-btn:disabled{background:var(--bg-3);cursor:not-allowed;transform:none;color:var(--text-dim);}
+#input-hint{font-size:10px;color:var(--text-dim);font-family:'IBM Plex Mono',monospace;padding:0 13px 8px;}
+#input-hint kbd{background:var(--bg-3);border:1px solid var(--border);border-radius:3px;padding:0 3px;font-size:9px;}
+#file-input{display:none;}
+
+/* shift hint bar */
+#shift-hint{position:fixed;bottom:0;left:0;right:0;background:rgba(248,113,113,.12);border-top:1px solid rgba(248,113,113,.3);color:var(--red);font-family:'IBM Plex Mono',monospace;font-size:11px;text-align:center;padding:5px;letter-spacing:.08em;pointer-events:none;opacity:0;transition:opacity .15s;z-index:50;}
+body.shift-held #shift-hint{opacity:1;}
+
+/* ── FILE PANEL ── */
+#file-panel{width:260px;min-width:260px;background:var(--bg-1);border-left:1px solid var(--border);display:none;flex-direction:column;}
+#file-panel.open{display:flex;}
+#fp-header{padding:12px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;}
+#fp-header span{font-size:12px;font-family:'IBM Plex Mono',monospace;color:var(--text-1);}
+#fp-close{background:none;border:none;color:var(--text-2);cursor:pointer;font-size:16px;}
+#fp-close:hover{color:var(--text-0);}
+#fp-list{flex:1;overflow-y:auto;padding:8px;}
+.fp-item{display:flex;align-items:center;gap:8px;padding:7px 8px;border-radius:5px;cursor:pointer;transition:background .1s;text-decoration:none;color:inherit;}
+.fp-item:hover{background:var(--bg-2);}
+.fp-item-icon{font-size:18px;flex-shrink:0;}
+.fp-item-info{flex:1;min-width:0;}
+.fp-item-name{font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.fp-item-size{font-size:10px;color:var(--text-2);font-family:'IBM Plex Mono',monospace;margin-top:1px;}
+
+/* ── LIGHTBOX ── */
+#lightbox{display:none;position:fixed;inset:0;background:rgba(0,0,0,.88);z-index:100;align-items:center;justify-content:center;}
+#lightbox.open{display:flex;}
+#lightbox img{max-width:92vw;max-height:92vh;border-radius:8px;}
+#lb-close{position:absolute;top:18px;right:22px;font-size:22px;color:#fff;opacity:.6;cursor:pointer;background:none;border:none;transition:opacity .12s;}
+#lb-close:hover{opacity:1;}
+
+@keyframes fadeUp{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}
+@keyframes pulse{0%,100%{opacity:.3}50%{opacity:1}}
+</style>
+</head>
+<body>
+
+<div id="sidebar">
+  <div id="sidebar-header">
+    <div class="logo">// VOID</div>
+    <div class="tagline">personal space</div>
+  </div>
+  <div id="ch-list"><!-- 채널 목록은 JS에서 동적 렌더링 --></div>
+  <div id="sidebar-footer">
+    <div class="usr-avatar" id="my-avatar">?</div>
+    <div style="flex:1;min-width:0;">
+      <div class="usr-name" id="my-ip">연결 중...</div>
+      <div class="usr-status">온라인</div>
+    </div>
+    <div id="ws-dot" title="서버 연결 상태"></div>
+    <!-- 테마 기어 버튼 + 팝오버 (footer 안에 배치) -->
+    <div style="position:relative;">
+      <button id="theme-gear" title="테마 변경">⚙</button>
+      <div id="theme-popover">
+        <div id="tp-title">테마 선택</div>
+        <button class="tp-item" data-t="void">
+          <div class="tp-swatch"><span style="background:#0a0a0f"></span><span style="background:#7c6af7"></span></div>
+          <div class="tp-info"><div class="tp-label">VOID</div><div class="tp-sub">다크 / 퍼플</div></div>
+        </button>
+        <button class="tp-item" data-t="claude">
+          <div class="tp-swatch"><span style="background:#1a1a1a"></span><span style="background:#d4a853"></span></div>
+          <div class="tp-info"><div class="tp-label">Claude</div><div class="tp-sub">다크 / 골드</div></div>
+        </button>
+        <button class="tp-item" data-t="office">
+          <div class="tp-swatch"><span style="background:#2d3748"></span><span style="background:#2563eb"></span></div>
+          <div class="tp-info"><div class="tp-label">Office</div><div class="tp-sub">라이트 / 블루</div></div>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="main">
+  <div id="topbar">
+    <span id="topbar-name"># general</span>
+    <span id="topbar-desc">일반 채팅</span>
+    <div class="tb-actions">
+      <button class="icon-btn" id="fp-toggle-btn" title="파일 목록">📁</button>
+    </div>
+  </div>
+  <div id="messages-wrap">
+    <div id="messages"><div class="loading-dots"><span></span><span></span><span></span></div></div>
+  </div>
+  <div id="input-area">
+    <div id="input-box">
+      <div id="file-strip"></div>
+      <div id="input-row">
+        <button id="attach-btn" title="파일 첨부">＋</button>
+        <textarea id="msg-input" rows="1" placeholder="메시지 입력... (Shift+Enter: 줄바꿈 / Markdown 지원)"></textarea>
+        <button id="send-btn" disabled>➤</button>
+      </div>
+      <div id="input-hint">
+        <kbd>Enter</kbd> 전송 &nbsp;·&nbsp; <kbd>Shift</kbd>+<kbd>Enter</kbd> 줄바꿈 &nbsp;·&nbsp; **굵게** `코드` _기울임_ &nbsp;·&nbsp; 드래그&드롭 지원
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="file-panel">
+  <div id="fp-header"><span>📎 첨부 파일</span><button id="fp-close">✕</button></div>
+  <div id="fp-list"></div>
+</div>
+
+<div id="lightbox"><button id="lb-close">✕</button><img id="lb-img" src="" alt=""></div>
+<input type="file" id="file-input" multiple>
+<div id="shift-hint">⚠ Shift 키를 누른 채 메시지 / 파일을 클릭하면 즉시 삭제됩니다</div>
+
+<script>
+marked.setOptions({ breaks:true, gfm:true });
+
+// ── STATE ──────────────────────────────────────────────────────
+let channels       = [];   // 서버 config에서 받아옴
+let currentChannel = null;
+let pendingFiles   = [];
+let myIP           = '?';
+let profiles       = {};   // { ip: { name, avatar } }
+let ws             = null;
+
+// ── INIT ───────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', async () => {
+  setupInput();
+  setupDragDrop();
+  setupFilePanel();
+  setupLightbox();
+  setupShiftKey();
+  setupGlobalFocus();
+  setupTheme();
+  await fetchWhoami();   // channels도 여기서 받아옴 → renderChannels() 호출
+  connectWS();
+  if (currentChannel) loadMessages(currentChannel);
+});
+
+// ── WHOAMI + PROFILES + CHANNELS ─────────────────────────────
+async function fetchWhoami() {
+  try {
+    const r = await fetch('/api/whoami');
+    const d = await r.json();
+    myIP     = d.ip;
+    profiles = d.profiles  || {};
+    channels = d.channels  || [];
+
+    applyMyProfile();
+    renderChannels(channels);
+  } catch(e) { /* ignore */ }
+}
+
+function applyMyProfile() {
+  const prof = profiles[myIP] || {};
+  const displayName = prof.name || myIP;
+  document.getElementById('my-ip').textContent = displayName;
+
+  const avatarEl = document.getElementById('my-avatar');
+  if (prof.avatar) {
+    avatarEl.innerHTML = `<img src="${prof.avatar}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">`;
+    avatarEl.style.color = '';
+  } else {
+    avatarEl.textContent = avatarLabel(myIP);
+    avatarEl.style.color = ipColor(myIP);
+  }
+}
+
+// ── RENDER CHANNEL LIST ───────────────────────────────────────
+function renderChannels(chs) {
+  const list = document.getElementById('ch-list');
+  list.innerHTML = '';
+
+  // type별로 그룹핑 (channel → 채널, dm → 다이렉트)
+  const groups = {};
+  chs.forEach(ch => {
+    const g = ch.type === 'dm' ? 'dm' : 'channel';
+    (groups[g] = groups[g] || []).push(ch);
+  });
+
+  const GROUP_LABEL = { channel: '채널', dm: '다이렉트' };
+  const SIGIL       = { channel: '#', dm: '@' };
+
+  ['channel', 'dm'].forEach(gtype => {
+    if (!groups[gtype]?.length) return;
+    const label = document.createElement('div');
+    label.className = 'section-label';
+    label.textContent = GROUP_LABEL[gtype];
+    list.appendChild(label);
+
+    groups[gtype].forEach(ch => {
+      const el = document.createElement('div');
+      el.className = 'ch-item';
+      el.dataset.ch = ch.id;
+      el.innerHTML = `<span class="ch-sigil">${SIGIL[ch.type] || '#'}</span>${esc(ch.label)}<span class="ch-unread" id="unread-${esc(ch.id)}"></span>`;
+
+      el.addEventListener('click', () => switchChannel(ch));
+      list.appendChild(el);
+    });
+  });
+
+  // 첫 번째 채널을 기본 활성 채널로 설정
+  if (!currentChannel && chs.length > 0) {
+    switchChannel(chs[0], true);
+  } else if (currentChannel) {
+    // 채널 목록이 업데이트됐을 때 현재 채널 active 복원
+    const activeEl = list.querySelector(`[data-ch="${currentChannel}"]`);
+    if (activeEl) activeEl.classList.add('active');
+  }
+}
+
+function switchChannel(ch, silent = false) {
+  document.querySelectorAll('.ch-item').forEach(x => x.classList.remove('active'));
+  const el = document.getElementById('ch-list').querySelector(`[data-ch="${ch.id}"]`);
+  if (el) el.classList.add('active');
+
+  currentChannel = ch.id;
+  const sigil = ch.type === 'dm' ? '@' : '#';
+  document.getElementById('topbar-name').textContent = `${sigil} ${ch.label}`;
+  document.getElementById('topbar-desc').textContent = ch.desc || '';
+
+  // 안 읽음 배지 초기화
+  const badge = document.getElementById(`unread-${ch.id}`);
+  if (badge) { badge.style.display = 'none'; badge.textContent = ''; }
+
+  if (!silent) loadMessages(ch.id);
+}
+
+// IP → 프로파일 (없으면 빈 객체)
+function getProfile(ip) {
+  return profiles[ip] || {};
+}
+
+// IP → 표시 이름
+function resolveName(ip) {
+  return getProfile(ip).name || ip;
+}
+
+// 아바타 라벨 (이미지 없을 때 사용)
+function avatarLabel(ip) {
+  const name = getProfile(ip).name;
+  if (name) return name[0].toUpperCase();
+  const parts = ip.split('.');
+  return parts.length === 4 ? parts[3] : ip.slice(-3);
+}
+
+// IP → 결정론적 색상
+function ipColor(ip) {
+  const COLORS = ['#7c6af7','#67e8f9','#4ade80','#fbbf24','#f472b6','#fb923c','#a78bfa','#34d399'];
+  let h = 0;
+  for (let i = 0; i < ip.length; i++) h = (h * 31 + ip.charCodeAt(i)) >>> 0;
+  return COLORS[h % COLORS.length];
+}
+
+// ── SHIFT KEY ─────────────────────────────────────────────────
+function setupShiftKey() {
+  document.addEventListener('keydown', e => { if (e.key==='Shift') document.body.classList.add('shift-held'); });
+  document.addEventListener('keyup',   e => { if (e.key==='Shift') document.body.classList.remove('shift-held'); });
+  window.addEventListener('blur', () => document.body.classList.remove('shift-held'));
+}
+
+// ── GLOBAL KEY → 입력창 포커스 ────────────────────────────────
+function setupGlobalFocus() {
+  document.addEventListener('keydown', (e) => {
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    if (e.key.length !== 1) return;
+    const active = document.activeElement;
+    if (active && (active.tagName === 'TEXTAREA' || active.tagName === 'INPUT')) return;
+    document.getElementById('msg-input').focus();
+  });
+}
+
+// ── THEME ─────────────────────────────────────────────────────
+const THEMES = ['void', 'claude', 'office'];
+
+function setupTheme() {
+  const saved = localStorage.getItem('void-theme') || 'void';
+  applyTheme(saved);
+
+  const gear = document.getElementById('theme-gear');
+  const pop  = document.getElementById('theme-popover');
+
+  // 기어 클릭 → 팝오버 토글
+  gear.addEventListener('click', (e) => {
+    e.stopPropagation();
+    pop.classList.toggle('open');
+  });
+
+  // 팝오버 아이템 클릭 → 테마 적용 + 닫기
+  pop.querySelectorAll('.tp-item').forEach(btn => {
+    btn.addEventListener('click', () => {
+      applyTheme(btn.dataset.t);
+      pop.classList.remove('open');
+    });
+  });
+
+  // 바깥 클릭 → 팝오버 닫기
+  document.addEventListener('click', () => pop.classList.remove('open'));
+  pop.addEventListener('click', e => e.stopPropagation());
+}
+
+function applyTheme(t) {
+  if (!THEMES.includes(t)) t = 'void';
+  document.documentElement.setAttribute('data-theme', t);
+  document.querySelectorAll('.tp-item').forEach(b => {
+    b.classList.toggle('active', b.dataset.t === t);
+  });
+  localStorage.setItem('void-theme', t);
+
+  // 테마 전환 시 inline style 조작 불필요 — CSS custom property(--ip-color)로 처리됨
+}
+
+
+
+// ── WEBSOCKET ─────────────────────────────────────────────────
+function connectWS() {
+  const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  ws = new WebSocket(`${proto}//${location.host}`);
+  const dot = document.getElementById('ws-dot');
+  ws.onopen  = () => { dot.className = 'live'; };
+  ws.onclose = () => { dot.className = 'err'; setTimeout(connectWS, 3000); };
+  ws.onerror = () => { dot.className = 'err'; };
+  ws.onmessage = (e) => {
+    const p = JSON.parse(e.data);
+    if (p.type === 'message') {
+      if (p.data.channel === currentChannel) appendMessage(p.data);
+      else bumpUnread(p.data.channel);
+    } else if (p.type === 'delete') {
+      const el = document.querySelector(`.msg-group[data-id="${p.id}"]`);
+      if (el) animateDelete(el);
+    } else if (p.type === 'deleteAttachment') {
+      const el = document.querySelector(`[data-att-id="${p.id}"]`);
+      if (el) el.remove();
+    } else if (p.type === 'profilesUpdate') {
+      profiles = p.profiles;
+      applyMyProfile();
+    } else if (p.type === 'channelsUpdate') {
+      channels = p.channels;
+      renderChannels(channels);
+    }
+  };
+}
+
+function bumpUnread(ch) {
+  // renderChannels가 동적으로 id를 생성하므로 id로 찾음
+  const b = document.getElementById(`unread-${ch}`);
+  if (!b) return;
+  b.style.display = '';
+  b.textContent = (parseInt(b.textContent) || 0) + 1;
+}
+
+// ── LOAD MESSAGES ────────────────────────────────────────────
+async function loadMessages(ch) {
+  const container = document.getElementById('messages');
+  container.innerHTML = `<div class="loading-dots"><span></span><span></span><span></span></div>`;
+  try {
+    const msgs = await fetch(`/api/messages/${ch}`).then(r => r.json());
+    container.innerHTML = '';
+    if (msgs.length === 0) {
+      container.appendChild(sysEl('아직 메시지가 없습니다. 첫 메시지를 보내보세요!'));
+    } else {
+      let lastDateKey = null;   // ← 날짜 비교용 키 (별도 변수로 관리)
+      msgs.forEach(msg => {
+        const dk = dateDayKey(msg.created_at);
+        if (dk !== lastDateKey) {
+          const divEl = makeDateDivider(dateLabel(msg.created_at));
+          divEl.dataset.dk = dk;
+          container.appendChild(divEl);
+          lastDateKey = dk;
+        }
+        container.appendChild(buildMsgEl(msg));
+      });
+    }
+    scrollBottom();
+  } catch {
+    container.innerHTML = '';
+    container.appendChild(sysEl('서버에 연결할 수 없습니다.'));
+  }
+}
+
+// ── APPEND (no flicker) ───────────────────────────────────────
+function appendMessage(msg) {
+  const c = document.getElementById('messages');
+  const hint = c.querySelector('.msg-system');
+  if (hint && hint.textContent.includes('아직')) hint.remove();
+
+  // querySelectorAll로 마지막 .date-divider를 직접 가져옴
+  // (querySelector + :last-of-type은 tag 기준이라 class 필터가 제대로 동작하지 않음)
+  const allDividers = c.querySelectorAll('.date-divider');
+  const lastDiv = allDividers.length > 0 ? allDividers[allDividers.length - 1] : null;
+  const lastDk  = lastDiv ? lastDiv.dataset.dk : null;
+  const dk      = dateDayKey(msg.created_at);
+
+  if (dk !== lastDk) {
+    const divEl = makeDateDivider(dateLabel(msg.created_at));
+    divEl.dataset.dk = dk;
+    c.appendChild(divEl);
+  }
+
+  c.appendChild(buildMsgEl(msg));
+  if (c.scrollHeight - c.scrollTop - c.clientHeight < 120) scrollBottom();
+}
+
+// ── BUILD MESSAGE ELEMENT ────────────────────────────────────
+function buildMsgEl(msg) {
+  const group = document.createElement('div');
+  group.className = 'msg-group';
+  group.dataset.id = msg.id;
+
+  group.addEventListener('click', (e) => {
+    if (!e.shiftKey) return;
+    e.preventDefault();
+    if (e.target.closest('.file-card') || e.target.closest('.img-wrap')) return;
+    deleteMessage(msg.id, group);
+  });
+
+  const color = ipColor(msg.author);
+
+  const name   = resolveName(msg.author);
+  const prof   = getProfile(msg.author);
+  // bubble 모드(office/claude)에서 내 메시지 오른쪽 정렬을 위한 속성
+  if (msg.author === myIP) group.dataset.mine = '1';
+
+  const avatar = document.createElement('div');
+  avatar.className = 'msg-avatar';
+  avatar.title = name !== msg.author ? `${name} (${msg.author})` : msg.author;
+  if (prof.avatar) {
+    avatar.innerHTML = `<img src="${prof.avatar}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">`;
+  } else {
+    avatar.textContent = avatarLabel(msg.author);
+    avatar.style.color = color;
+  }
+  group.appendChild(avatar);
+
+  const body = document.createElement('div');
+  body.className = 'msg-body';
+
+  const meta = document.createElement('div');
+  meta.className = 'msg-meta';
+
+  const authorEl = document.createElement('span');
+  authorEl.className = 'msg-author';
+  // inline style 대신 CSS custom property로 색 전달
+  // → CSS에서 .msg-author { color: var(--ip-color) } 로 사용
+  // → bubble 테마에서는 CSS !important로 덮어씌울 수 있음
+  authorEl.style.setProperty('--ip-color', color);
+  authorEl.textContent = name;
+  authorEl.title = name !== msg.author ? msg.author : '';
+  
+  const timeEl = document.createElement('span');
+  timeEl.className = 'msg-time';
+  timeEl.textContent = timeStr(msg.created_at);
+
+  meta.appendChild(authorEl);
+  meta.appendChild(timeEl);
+  body.appendChild(meta);
+
+  if (msg.text && msg.text.trim()) {
+    const content = document.createElement('div');
+    content.className = 'msg-content';
+    content.innerHTML = marked.parse(msg.text);
+    body.appendChild(content);
+  }
+
+  (msg.attachments || []).forEach(a => body.appendChild(buildAttachment(a)));
+  group.appendChild(body);
+  return group;
+}
+
+function buildAttachment(a) {
+  const isImage = a.mime && a.mime.startsWith('image/');
+  if (isImage) {
+    const wrap = document.createElement('div');
+    wrap.className = 'img-wrap';
+    wrap.dataset.attId = a.id;
+    const img = document.createElement('img');
+    img.className = 'img-preview';
+    img.src = a.url; img.alt = a.original;
+    img.title = `${a.original}  (Shift+클릭: 삭제)`;
+    img.addEventListener('click', (e) => {
+      if (e.shiftKey) { e.preventDefault(); deleteAttachment(a.id, wrap); }
+      else openLightbox(a.url);
+    });
+    wrap.appendChild(img);
+    return wrap;
+  }
+  const card = document.createElement('a');
+  card.className = 'file-card';
+  card.dataset.attId = a.id;
+  card.href = a.url; card.download = a.original;
+  card.title = `${a.original}  (Shift+클릭: 삭제 / 일반 클릭: 다운로드)`;
+  card.innerHTML = `<div class="file-icon">${fileIcon(a.original)}</div>
+    <div class="file-info"><div class="file-name">${esc(a.original)}</div>
+    <div class="file-size">${fmtSize(a.size)}</div></div>
+    <div class="file-dl">⬇</div>`;
+  card.addEventListener('click', (e) => {
+    if (e.shiftKey) { e.preventDefault(); deleteAttachment(a.id, card); }
+  });
+  return card;
+}
+
+// ── DELETE ───────────────────────────────────────────────────
+function animateDelete(el) {
+  el.classList.add('deleting');
+  el.addEventListener('animationend', () => el.remove(), { once:true });
+}
+async function deleteMessage(id, el) {
+  animateDelete(el);
+  try { await fetch(`/api/messages/${id}`, { method:'DELETE' }); } catch {}
+}
+async function deleteAttachment(id, el) {
+  el.style.opacity = '0.3'; el.style.pointerEvents = 'none';
+  try { await fetch(`/api/attachments/${id}`, { method:'DELETE' }); }
+  catch { el.style.opacity=''; el.style.pointerEvents=''; }
+}
+
+// ── SEND ─────────────────────────────────────────────────────
+async function sendMessage() {
+  const input = document.getElementById('msg-input');
+  const text  = input.value.trim();
+  if (!text && pendingFiles.length === 0) return;
+  const btn = document.getElementById('send-btn');
+  btn.disabled = true;
+  try {
+    const fd = new FormData();
+    fd.append('channel', currentChannel);
+    fd.append('text', text);
+    pendingFiles.forEach(f => fd.append('files', f.raw));
+    await fetch('/api/messages', { method:'POST', body:fd });
+    input.value = ''; input.style.height = 'auto';
+    clearPendingFiles();
+  } catch { alert('전송 실패: 서버를 확인해 주세요.'); }
+  finally { btn.disabled=false; input.focus(); }
+}
+
+// ── INPUT ────────────────────────────────────────────────────
+function setupInput() {
+  const ta = document.getElementById('msg-input');
+  const btn = document.getElementById('send-btn');
+  ta.addEventListener('keydown', e => {
+    if (e.key==='Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+  });
+  ta.addEventListener('input', () => {
+    ta.style.height='auto';
+    ta.style.height=Math.min(ta.scrollHeight,180)+'px';
+    btn.disabled = !ta.value.trim() && pendingFiles.length===0;
+  });
+  document.getElementById('attach-btn').onclick = () => document.getElementById('file-input').click();
+  document.getElementById('file-input').addEventListener('change', function(){
+    queueFiles(Array.from(this.files)); this.value='';
+  });
+  document.getElementById('send-btn').onclick = sendMessage;
+}
+function queueFiles(list) {
+  list.forEach(f => pendingFiles.push({raw:f,name:f.name,size:f.size}));
+  renderFileStrip();
+  document.getElementById('send-btn').disabled = false;
+}
+function renderFileStrip() {
+  const s = document.getElementById('file-strip');
+  s.innerHTML='';
+  if (!pendingFiles.length) { s.classList.remove('has-files'); return; }
+  s.classList.add('has-files');
+  pendingFiles.forEach((f,i) => {
+    const chip = document.createElement('div');
+    chip.className='f-chip';
+    chip.innerHTML=`<span>${fileIcon(f.name)}</span>
+      <span class="f-chip-name" title="${esc(f.name)}">${esc(f.name)}</span>
+      <button class="f-chip-rm" data-i="${i}">✕</button>`;
+    s.appendChild(chip);
+  });
+  s.querySelectorAll('.f-chip-rm').forEach(b => {
+    b.onclick = () => { pendingFiles.splice(+b.dataset.i,1); renderFileStrip(); };
+  });
+}
+function clearPendingFiles() { pendingFiles=[]; renderFileStrip(); }
+
+// ── DRAG & DROP ──────────────────────────────────────────────
+function setupDragDrop() {
+  const wrap=document.getElementById('messages-wrap'); let cnt=0;
+  wrap.addEventListener('dragenter',e=>{e.preventDefault();cnt++;wrap.classList.add('drag-over');});
+  wrap.addEventListener('dragleave',()=>{if(--cnt===0)wrap.classList.remove('drag-over');});
+  wrap.addEventListener('dragover',e=>e.preventDefault());
+  wrap.addEventListener('drop',e=>{e.preventDefault();cnt=0;wrap.classList.remove('drag-over');queueFiles(Array.from(e.dataTransfer.files));});
+}
+
+// ── FILE PANEL ───────────────────────────────────────────────
+function setupFilePanel() {
+  const panel=document.getElementById('file-panel');
+  document.getElementById('fp-toggle-btn').onclick = async () => {
+    const open=panel.classList.toggle('open');
+    if(!open) return;
+    const msgs=await fetch(`/api/messages/${currentChannel}`).then(r=>r.json());
+    const atts=msgs.flatMap(m=>m.attachments||[]);
+    const list=document.getElementById('fp-list');
+    list.innerHTML='';
+    if(!atts.length){
+      list.innerHTML=`<div style="padding:14px;font-size:12px;color:var(--text-2);font-family:'IBM Plex Mono',monospace;">파일 없음</div>`;
+    } else {
+      atts.forEach(a=>{
+        const item=document.createElement('a');
+        item.className='fp-item'; item.href=a.url; item.download=a.original;
+        item.innerHTML=`<div class="fp-item-icon">${fileIcon(a.original)}</div>
+          <div class="fp-item-info"><div class="fp-item-name">${esc(a.original)}</div>
+          <div class="fp-item-size">${fmtSize(a.size)}</div></div>`;
+        list.appendChild(item);
+      });
+    }
+  };
+  document.getElementById('fp-close').onclick=()=>panel.classList.remove('open');
+}
+
+// ── LIGHTBOX ────────────────────────────────────────────────
+function setupLightbox(){
+  document.getElementById('lb-close').onclick=closeLightbox;
+  document.getElementById('lightbox').onclick=e=>{if(e.target===e.currentTarget)closeLightbox();};
+}
+function openLightbox(src){document.getElementById('lb-img').src=src;document.getElementById('lightbox').classList.add('open');}
+function closeLightbox(){document.getElementById('lightbox').classList.remove('open');}
+
+// ── HELPERS ─────────────────────────────────────────────────
+function scrollBottom(){const c=document.getElementById('messages');c.scrollTop=c.scrollHeight;}
+function sysEl(t){const d=document.createElement('div');d.className='msg-system';d.textContent=t;return d;}
+
+// 날짜 구분선 — data-dk 속성으로 날짜 키 저장 (비교를 textContent 대신 이것으로)
+function makeDateDivider(label) {
+  const d = document.createElement('div');
+  d.className = 'date-divider';
+  d.textContent = label;
+  return d;
+}
+
+// YYYYMMDD 형태의 날짜 키 — 같은 날이면 무조건 같은 문자열
+function dateDayKey(ts) {
+  const d = new Date(ts);
+  return `${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}`;
+}
+
+// 표시용 레이블 (오늘/어제/날짜)
+function dateLabel(ts) {
+  const d   = new Date(ts);
+  const now = new Date();
+  const todayKey     = dateDayKey(now.getTime());
+  const yesterdayKey = dateDayKey(now.getTime() - 86400000);
+  const dk = dateDayKey(ts);
+  if (dk === todayKey)     return '오늘';
+  if (dk === yesterdayKey) return '어제';
+  return d.toLocaleDateString('ko-KR',{year:'numeric',month:'long',day:'numeric'});
+}
+
+function timeStr(ts){return new Date(ts).toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'});}
+function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function fmtSize(b){return b<1024?b+' B':b<1048576?(b/1024).toFixed(1)+' KB':b<1073741824?(b/1048576).toFixed(1)+' MB':(b/1073741824).toFixed(1)+' GB';}
+function fileIcon(n){
+  const e=(n||'').split('.').pop().toLowerCase();
+  return {pdf:'📄',doc:'📝',docx:'📝',txt:'📝',xls:'📊',xlsx:'📊',csv:'📊',ppt:'📊',pptx:'📊',
+          zip:'🗜',rar:'🗜','7z':'🗜',tar:'🗜',gz:'🗜',
+          mp3:'🎵',wav:'🎵',flac:'🎵',m4a:'🎵',mp4:'🎬',mov:'🎬',avi:'🎬',mkv:'🎬',
+          png:'🖼',jpg:'🖼',jpeg:'🖼',gif:'🖼',webp:'🖼',svg:'🖼',
+          js:'💾',ts:'💾',py:'💾',html:'💾',css:'💾',json:'💾'}[e]||'📦';
+}
+</script>
+</body>
+</html>
