@@ -134,9 +134,11 @@
 [data-theme="claude"] .msg-group[data-mine] .msg-content code,
 [data-theme="office"] .msg-group[data-mine] .msg-content code { background:rgba(0,0,0,.25); color:inherit; }
 
-/* 호버 힌트 bubble 모드에선 숨김 */
-[data-theme="claude"] .msg-group::after,
-[data-theme="office"] .msg-group::after { display:none; }
+/* bubble 모드: msg-actions를 말풍선 바깥 오른쪽에 고정 */
+[data-theme="claude"] .msg-actions,
+[data-theme="office"] .msg-actions {
+  top: 4px; transform: none;
+}
 
 /* ── 작성자명 색상 ──
    JS에서 inline style이 아닌 CSS custom property(--ip-color)로 색을 전달하므로
@@ -234,7 +236,10 @@
 [data-theme="office"] .tp-item.active .tp-label { color:#a78bfa; }
 
 *{box-sizing:border-box;margin:0;padding:0}
-body{font-family:'Pretendard',sans-serif;background:var(--bg-0);color:var(--text-0);height:100vh;display:flex;overflow:hidden;}
+/* UI 영역 전체 텍스트 선택 방지 */
+body{font-family:'Pretendard',sans-serif;background:var(--bg-0);color:var(--text-0);height:100vh;display:flex;overflow:hidden;user-select:none;}
+/* 메시지 내용(텍스트)만 선택 허용 */
+.msg-content{user-select:text;}
 
 /* ── SIDEBAR ── */
 #sidebar{width:220px;min-width:220px;background:var(--bg-1);border-right:1px solid var(--border);display:flex;flex-direction:column;}
@@ -282,21 +287,61 @@ body{font-family:'Pretendard',sans-serif;background:var(--bg-0);color:var(--text
 .msg-group{
   display:flex;gap:11px;padding:4px 8px;border-radius:6px;
   transition:background .1s;animation:fadeUp .18s ease;
-  position:relative;
+  position:relative; align-items:flex-start;
 }
 .msg-group:hover{background:var(--bg-2);}
-.msg-group::after{
-  content:'Shift+클릭으로 삭제';
-  position:absolute;right:10px;top:50%;transform:translateY(-50%);
-  font-size:10px;font-family:'IBM Plex Mono',monospace;
-  color:var(--text-2);letter-spacing:.05em;
-  opacity:0;transition:opacity .15s;pointer-events:none;white-space:nowrap;
-}
-.msg-group:hover::after{opacity:1;}
 body.shift-held .msg-group:hover{background:var(--del-flash);cursor:pointer;}
-body.shift-held .msg-group:hover::after{color:var(--red);}
 @keyframes deleteFlash{0%{background:var(--del-flash);opacity:1}100%{opacity:0;transform:translateX(-8px)}}
 .msg-group.deleting{animation:deleteFlash .25s ease forwards;pointer-events:none;}
+
+/* ── 메시지 액션 툴바 (hover 시 우측에 나타남) ── */
+.msg-actions{
+  position:absolute; right:8px; top:50%; transform:translateY(-50%);
+  display:flex; align-items:center; gap:3px;
+  opacity:0; pointer-events:none; transition:opacity .12s;
+}
+.msg-group:hover .msg-actions{ opacity:1; pointer-events:auto; }
+body.shift-held .msg-group:hover .msg-actions{ opacity:0; pointer-events:none; }
+.msg-act-btn{
+  background:var(--bg-3); border:1px solid var(--border);
+  border-radius:5px; padding:3px 6px; cursor:pointer;
+  font-size:14px; line-height:1; transition:all .1s;
+  color:var(--text-1);
+}
+.msg-act-btn:hover{ background:var(--border-hi); border-color:var(--border-hi); transform:scale(1.15); }
+.msg-act-btn.del-btn{ font-size:12px; color:var(--text-2); }
+.msg-act-btn.del-btn:hover{ background:rgba(248,113,113,.15); border-color:var(--red); color:var(--red); }
+/* shift 키 누를 때는 툴바 숨김 — shift+click 삭제 모드 */
+body.shift-held .msg-group:hover .msg-actions{ display:none; }
+
+/* ── 리액션 표시 ── */
+.msg-reactions{
+  display:flex; flex-wrap:wrap; gap:4px;
+  margin-top:5px;
+}
+.reaction-chip{
+  display:inline-flex; align-items:center; gap:4px;
+  background:var(--bg-3); border:1px solid var(--border);
+  border-radius:12px; padding:2px 8px; cursor:pointer;
+  font-size:13px; transition:all .12s; position:relative;
+  user-select:none;
+}
+.reaction-chip:hover{ background:var(--accent-glow); border-color:var(--accent); }
+.reaction-chip.mine{ background:var(--accent-glow); border-color:var(--accent); }
+.reaction-chip .rc-count{
+  font-size:11px; font-family:'IBM Plex Mono',monospace;
+  color:var(--text-1); line-height:1;
+}
+/* hover 시 누가 했는지 툴팁 */
+.reaction-chip .rc-tooltip{
+  display:none; position:absolute; bottom:calc(100% + 5px); left:50%;
+  transform:translateX(-50%);
+  background:var(--bg-0); border:1px solid var(--border-hi);
+  border-radius:5px; padding:4px 8px; white-space:nowrap;
+  font-size:10px; font-family:'IBM Plex Mono',monospace; color:var(--text-1);
+  box-shadow:0 4px 12px rgba(0,0,0,.3); z-index:10; pointer-events:none;
+}
+.reaction-chip:hover .rc-tooltip{ display:block; }
 
 .msg-avatar{width:34px;height:34px;border-radius:50%;flex-shrink:0;margin-top:2px;display:flex;align-items:center;justify-content:center;font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:500;background:var(--bg-3);cursor:default;user-select:none;overflow:hidden;}
 .msg-body{flex:1;min-width:0;}
@@ -704,6 +749,10 @@ function connectWS() {
     } else if (p.type === 'channelsUpdate') {
       channels = p.channels;
       renderChannels(channels);
+    } else if (p.type === 'reaction') {
+      // 해당 메시지의 리액션 wrap을 찾아 업데이트
+      const wrap = document.querySelector(`.msg-reactions[data-msg-id="${p.messageId}"]`);
+      if (wrap) renderReactionChips(wrap, p.messageId, p.reactions);
     }
   };
 }
@@ -830,8 +879,89 @@ function buildMsgEl(msg) {
   }
 
   (msg.attachments || []).forEach(a => body.appendChild(buildAttachment(a)));
+
+  // 리액션 표시
+  const reactionsEl = buildReactionsEl(msg.id, msg.reactions || {});
+  body.appendChild(reactionsEl);
+
   group.appendChild(body);
+
+  // 액션 툴바 (리액션 버튼 3개 + 삭제 버튼)
+  const actions = document.createElement('div');
+  actions.className = 'msg-actions';
+
+  ['⭕','❌','✅'].forEach(emoji => {
+    const btn = document.createElement('button');
+    btn.className = 'msg-act-btn';
+    btn.textContent = emoji;
+    btn.title = `${emoji} 리액션`;
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      toggleReaction(msg.id, emoji);
+    });
+    actions.appendChild(btn);
+  });
+
+  const delBtn = document.createElement('button');
+  delBtn.className = 'msg-act-btn del-btn';
+  delBtn.textContent = '🗑';
+  delBtn.title = '메시지 삭제';
+  delBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    deleteMessage(msg.id, group);
+  });
+  actions.appendChild(delBtn);
+
+  group.appendChild(actions);
   return group;
+}
+
+// ── REACTIONS ────────────────────────────────────────────────
+function buildReactionsEl(msgId, reactions) {
+  const wrap = document.createElement('div');
+  wrap.className = 'msg-reactions';
+  wrap.dataset.msgId = msgId;
+  renderReactionChips(wrap, msgId, reactions);
+  return wrap;
+}
+
+function renderReactionChips(wrap, msgId, reactions) {
+  wrap.innerHTML = '';
+  Object.entries(reactions).forEach(([emoji, authors]) => {
+    if (!authors || authors.length === 0) return;
+    const chip = document.createElement('button');
+    chip.className = 'reaction-chip';
+    if (authors.includes(myIP)) chip.classList.add('mine');
+
+    const names = authors.map(ip => {
+      const n = resolveName(ip);
+      return n !== ip ? n : ip.split('.').pop();
+    });
+
+    const tooltip = document.createElement('span');
+    tooltip.className = 'rc-tooltip';
+    tooltip.textContent = names.join(', ');
+
+    chip.innerHTML = `<span>${emoji}</span><span class="rc-count">${authors.length}</span>`;
+    chip.appendChild(tooltip);
+    chip.title = '';
+    chip.addEventListener('click', (e) => {
+      e.stopPropagation();
+      toggleReaction(msgId, emoji);
+    });
+    wrap.appendChild(chip);
+  });
+}
+
+async function toggleReaction(msgId, emoji) {
+  try {
+    await fetch('/api/reactions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messageId: msgId, emoji }),
+    });
+    // 서버가 WS로 broadcast하므로 별도 UI 업데이트 불필요
+  } catch (e) { console.error('reaction error', e); }
 }
 
 function buildAttachment(a) {

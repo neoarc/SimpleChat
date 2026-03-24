@@ -139,6 +139,17 @@ db.exec(`
 
   CREATE INDEX IF NOT EXISTS idx_msg_channel ON messages(channel, created_at);
   CREATE INDEX IF NOT EXISTS idx_att_msg     ON attachments(message_id);
+
+  CREATE TABLE IF NOT EXISTS reactions (
+    id         TEXT PRIMARY KEY,
+    message_id TEXT NOT NULL,
+    emoji      TEXT NOT NULL,
+    author     TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    UNIQUE(message_id, emoji, author),
+    FOREIGN KEY (message_id) REFERENCES messages(id) ON DELETE CASCADE
+  );
+  CREATE INDEX IF NOT EXISTS idx_react_msg ON reactions(message_id);
 `);
 
 const stmts = {
@@ -160,6 +171,11 @@ const stmts = {
   deleteMsg:    db.prepare(`DELETE FROM messages WHERE id = ?`),
   deleteAtts:   db.prepare(`DELETE FROM attachments WHERE message_id = ?`),
   deleteAtt:    db.prepare(`DELETE FROM attachments WHERE id = ?`),
+  // reactions
+  getReactions: db.prepare(`SELECT emoji, author FROM reactions WHERE message_id = ?`),
+  upsertReact:  db.prepare(`INSERT OR IGNORE INTO reactions (id,message_id,emoji,author,created_at) VALUES (?,?,?,?,?)`),
+  deleteReact:  db.prepare(`DELETE FROM reactions WHERE message_id=? AND emoji=? AND author=?`),
+  getReactsByMsg: db.prepare(`SELECT emoji, author FROM reactions WHERE message_id = ?`),
 };
 
 // ── FILE UPLOAD ───────────────────────────────────────────────────
@@ -302,6 +318,37 @@ app.delete('/api/attachments/:id', (req, res) => {
   res.json({ ok: true });
 });
 
+// POST /api/reactions  — 리액션 토글 (없으면 추가, 있으면 제거)
+app.post('/api/reactions', (req, res) => {
+  const ip = getClientIP(req);
+  const { messageId, emoji } = req.body;
+  if (!messageId || !emoji) return res.status(400).json({ error: 'missing fields' });
+
+  const ALLOWED = ['⭕','❌','✅'];
+  if (!ALLOWED.includes(emoji)) return res.status(400).json({ error: 'invalid emoji' });
+
+  const existing = db.prepare(
+    `SELECT id FROM reactions WHERE message_id=? AND emoji=? AND author=?`
+  ).get(messageId, emoji, ip);
+
+  if (existing) {
+    stmts.deleteReact.run(messageId, emoji, ip);
+  } else {
+    stmts.upsertReact.run(uuidv4(), messageId, emoji, ip, Date.now());
+  }
+
+  // 최신 reactions 상태 수집
+  const reactRows = stmts.getReactsByMsg.all(messageId);
+  const reactions = {};
+  reactRows.forEach(r => {
+    if (!reactions[r.emoji]) reactions[r.emoji] = [];
+    reactions[r.emoji].push(r.author);
+  });
+
+  broadcast({ type: 'reaction', messageId, reactions });
+  res.json({ ok: true, reactions });
+});
+
 // ── WS SERVER ─────────────────────────────────────────────────────
 const server = http.createServer(app);
 const wss    = new WebSocket.Server({ server });
@@ -342,6 +389,13 @@ function parseRow(row) {
         return { id, filename, original, size: Number(size), mime, url: `/uploads/${filename}` };
       })
     : [];
+  // reactions: { emoji -> [author, ...] }
+  const reactRows = stmts.getReactions.all(row.id);
+  const reactions = {};
+  reactRows.forEach(r => {
+    if (!reactions[r.emoji]) reactions[r.emoji] = [];
+    reactions[r.emoji].push(r.author);
+  });
   return { id: row.id, channel: row.channel, author: row.author,
-           text: row.text, created_at: row.created_at, attachments };
+           text: row.text, created_at: row.created_at, attachments, reactions };
 }
