@@ -134,21 +134,32 @@
 [data-theme="claude"] .msg-group[data-mine] .msg-content code,
 [data-theme="office"] .msg-group[data-mine] .msg-content code { background:rgba(0,0,0,.25); color:inherit; }
 
-/* bubble 모드: msg-actions를 말풍선 바깥 오른쪽에 고정 */
+/* bubble 모드: msg-actions flex 흐름 유지 */
 [data-theme="claude"] .msg-actions,
 [data-theme="office"] .msg-actions {
-  top: 4px; transform: none;
+  margin-left: 8px;
+  align-self: flex-start;
+  padding-top: 2px;
 }
 
 /* ── 작성자명 색상 ──
-   JS에서 inline style이 아닌 CSS custom property(--ip-color)로 색을 전달하므로
-   !important 없이도 아래 선택자가 우선적으로 적용됨 */
-/* office 라이트: 상대방 이름 → 검정 계열 고정 (밝은 배경이므로) */
-[data-theme="office"] .msg-author { color: var(--text-0); }
-/* office 내 말풍선 위 이름 → 반투명 흰색 */
-[data-theme="office"] .msg-group[data-mine] .msg-author { color: rgba(255,255,255,.8); }
-/* claude 내 말풍선 위 이름 → 반투명 흰색 */
-[data-theme="claude"] .msg-group[data-mine] .msg-author { color: rgba(245,245,245,.65); }
+   문제 원인: CSS 변수(--msg-me-color)는 DOM 트리 전체에 상속되므로
+   msg-content의 형제인 msg-meta 안의 msg-author에도
+   color:var(--ip-color)의 fallback/계산값에 영향을 줄 수 있음.
+   해결: msg-author에 !important로 명시적 색상 강제 */
+
+/* void 테마: ip-color 사용 */
+.msg-author { color: var(--ip-color, var(--accent)) !important; }
+
+/* office 라이트: 상대방 이름 → 진한 색 고정 */
+[data-theme="office"] .msg-author { color: var(--ip-color, var(--text-0)) !important; }
+
+/* bubble 테마 내 말풍선: msg-content가 흰색이지만 meta는 바깥이므로 ip-color 유지 */
+/* → !important로 상속된 흰색 차단 (선택자 specificity 강제 우선) */
+[data-theme="claude"] .msg-group[data-mine] .msg-author,
+[data-theme="office"] .msg-group[data-mine] .msg-author {
+  color: var(--ip-color, var(--accent)) !important;
+}
 
 /* ── OFFICE: 사이드바 어두운 패널 ── */
 [data-theme="office"] #sidebar { background:var(--sb-bg); border-right:1px solid var(--sb-border); }
@@ -296,23 +307,22 @@ body.shift-held .msg-group:hover{background:var(--del-flash);cursor:pointer;}
 
 /* ── 메시지 액션 툴바 (hover 시 우측에 나타남) ── */
 .msg-actions{
-  position:absolute; right:8px; top:50%; transform:translateY(-50%);
-  display:flex; align-items:center; gap:3px;
-  opacity:0; pointer-events:none; transition:opacity .12s;
+  /* flex 흐름 — absolute 미사용으로 버튼 수에 관계없이 모두 표시 */
+  display:none; align-items:center; gap:3px;
+  margin-left:auto; flex-shrink:0; padding-left:6px;
+  align-self:center;
 }
-.msg-group:hover .msg-actions{ opacity:1; pointer-events:auto; }
-body.shift-held .msg-group:hover .msg-actions{ opacity:0; pointer-events:none; }
+.msg-group:hover .msg-actions{ display:flex; }
+body.shift-held .msg-group:hover .msg-actions{ display:none; }
 .msg-act-btn{
   background:var(--bg-3); border:1px solid var(--border);
   border-radius:5px; padding:3px 6px; cursor:pointer;
   font-size:14px; line-height:1; transition:all .1s;
-  color:var(--text-1);
+  color:var(--text-1); white-space:nowrap;
 }
 .msg-act-btn:hover{ background:var(--border-hi); border-color:var(--border-hi); transform:scale(1.15); }
 .msg-act-btn.del-btn{ font-size:12px; color:var(--text-2); }
 .msg-act-btn.del-btn:hover{ background:rgba(248,113,113,.15); border-color:var(--red); color:var(--red); }
-/* shift 키 누를 때는 툴바 숨김 — shift+click 삭제 모드 */
-body.shift-held .msg-group:hover .msg-actions{ display:none; }
 
 /* ── 리액션 표시 ── */
 .msg-reactions{
@@ -528,12 +538,15 @@ body.shift-held #shift-hint{opacity:1;}
 marked.setOptions({ breaks:true, gfm:true });
 
 // ── STATE ──────────────────────────────────────────────────────
-let channels       = [];   // 서버 config에서 받아옴
-let currentChannel = null;
-let pendingFiles   = [];
-let myIP           = '?';
-let profiles       = {};   // { ip: { name, avatar } }
-let ws             = null;
+let channels          = [];   // 서버 config에서 받아옴
+let currentChannel    = null;
+let pendingFiles      = [];
+let myIP              = '?';
+let profiles          = {};   // { ip: { name, avatar } }
+let myGroups          = [];   // 내가 속한 그룹 ID 목록
+let myIsAdmin         = false;
+let allowedReactions  = ['⭕','❌','✅'];  // config에서 수신, 기본값 유지
+let ws                = null;
 
 // ── INIT ───────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async () => {
@@ -554,9 +567,12 @@ async function fetchWhoami() {
   try {
     const r = await fetch('/api/whoami');
     const d = await r.json();
-    myIP     = d.ip;
-    profiles = d.profiles  || {};
-    channels = d.channels  || [];
+    myIP             = d.ip;
+    profiles         = d.profiles || {};
+    channels         = d.channels || [];
+    myGroups         = d.groups   || [];
+    myIsAdmin        = d.isAdmin  || false;
+    allowedReactions = d.allowedReactions || ['⭕','❌','✅'];
 
     applyMyProfile();
     renderChannels(channels);
@@ -566,7 +582,19 @@ async function fetchWhoami() {
 function applyMyProfile() {
   const prof = profiles[myIP] || {};
   const displayName = prof.name || myIP;
-  document.getElementById('my-ip').textContent = displayName;
+
+  // 이름 + 그룹 배지
+  const nameEl = document.getElementById('my-ip');
+  nameEl.textContent = displayName;
+  if (myIsAdmin) nameEl.title = '최고관리자';
+  else if (myGroups.length) nameEl.title = myGroups.join(', ');
+
+  const statusEl = document.querySelector('.usr-status');
+  if (statusEl) {
+    if (myIsAdmin) statusEl.textContent = '관리자';
+    else if (myGroups.length) statusEl.textContent = myGroups[0];
+    else statusEl.textContent = '온라인';
+  }
 
   const avatarEl = document.getElementById('my-avatar');
   if (prof.avatar) {
@@ -583,9 +611,13 @@ function renderChannels(chs) {
   const list = document.getElementById('ch-list');
   list.innerHTML = '';
 
-  // type별로 그룹핑 (channel → 채널, dm → 다이렉트)
+  // _adminView(다른 사용자 개인채널) 분리
+  const normalChs = chs.filter(ch => !ch._adminView);
+  const adminChs  = chs.filter(ch =>  ch._adminView);
+
+  // 일반 채널: type별 그룹핑 (channel → 채널, dm → 다이렉트)
   const groups = {};
-  chs.forEach(ch => {
+  normalChs.forEach(ch => {
     const g = ch.type === 'dm' ? 'dm' : 'channel';
     (groups[g] = groups[g] || []).push(ch);
   });
@@ -601,24 +633,42 @@ function renderChannels(chs) {
     list.appendChild(label);
 
     groups[gtype].forEach(ch => {
-      const el = document.createElement('div');
-      el.className = 'ch-item';
-      el.dataset.ch = ch.id;
-      el.innerHTML = `<span class="ch-sigil">${SIGIL[ch.type] || '#'}</span>${esc(ch.label)}<span class="ch-unread" id="unread-${esc(ch.id)}"></span>`;
-
-      el.addEventListener('click', () => switchChannel(ch));
-      list.appendChild(el);
+      list.appendChild(makeChannelItem(ch, SIGIL[ch.type] || '#'));
     });
   });
+
+  // admin 전용: 다른 사용자 개인채널 섹션
+  if (adminChs.length > 0) {
+    const adminLabel = document.createElement('div');
+    adminLabel.className = 'section-label';
+    adminLabel.style.cssText = 'color:var(--yellow);opacity:.8;';
+    adminLabel.textContent = '👁 개인채널 (관리자)';
+    list.appendChild(adminLabel);
+
+    adminChs.forEach(ch => {
+      const el = makeChannelItem(ch, '🔒');
+      el.style.opacity = '.8';
+      el.title = `관리자 전용 뷰 — ${ch.desc || ch.label}`;
+      list.appendChild(el);
+    });
+  }
 
   // 첫 번째 채널을 기본 활성 채널로 설정
   if (!currentChannel && chs.length > 0) {
     switchChannel(chs[0], true);
   } else if (currentChannel) {
-    // 채널 목록이 업데이트됐을 때 현재 채널 active 복원
-    const activeEl = list.querySelector(`[data-ch="${currentChannel}"]`);
+    const activeEl = list.querySelector(`[data-ch="${CSS.escape(currentChannel)}"]`);
     if (activeEl) activeEl.classList.add('active');
   }
+}
+
+function makeChannelItem(ch, sigil) {
+  const el = document.createElement('div');
+  el.className = 'ch-item';
+  el.dataset.ch = ch.id;
+  el.innerHTML = `<span class="ch-sigil">${sigil}</span>${esc(ch.label)}<span class="ch-unread" id="unread-${esc(ch.id)}"></span>`;
+  el.addEventListener('click', () => switchChannel(ch));
+  return el;
 }
 
 function switchChannel(ch, silent = false) {
@@ -747,7 +797,10 @@ function connectWS() {
       profiles = p.profiles;
       applyMyProfile();
     } else if (p.type === 'channelsUpdate') {
-      channels = p.channels;
+      channels         = p.channels;
+      myGroups         = p.groups  || myGroups;
+      myIsAdmin        = p.isAdmin !== undefined ? p.isAdmin : myIsAdmin;
+      allowedReactions = p.allowedReactions || allowedReactions;
       renderChannels(channels);
     } else if (p.type === 'reaction') {
       // 해당 메시지의 리액션 wrap을 찾아 업데이트
@@ -890,7 +943,7 @@ function buildMsgEl(msg) {
   const actions = document.createElement('div');
   actions.className = 'msg-actions';
 
-  ['⭕','❌','✅'].forEach(emoji => {
+  allowedReactions.forEach(emoji => {
     const btn = document.createElement('button');
     btn.className = 'msg-act-btn';
     btn.textContent = emoji;

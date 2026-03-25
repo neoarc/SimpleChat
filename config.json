@@ -1,37 +1,101 @@
 {
   "allowedIPs": [
     "127.0.0.1",
-    "::1"
+    "::1",
+    "192.168.1.*",
+    "192.168.8.*"
+  ],
+
+  "groups": {
+    "admin": {
+      "label": "최고관리자",
+      "ips": ["127.0.0.1", "192.168.1.1"]
+    },
+    "team-dev": {
+      "label": "개발팀",
+      "ips": ["192.168.1.10-30"]
+    },
+    "team-design": {
+      "label": "디자인팀",
+      "ips": ["192.168.1.31-50"]
+    },
+    "guest": {
+      "label": "게스트",
+      "ips": ["192.168.8.*"]
+    }
+  },
+
+  "channels": [
+    {
+      "id": "general",
+      "type": "channel",
+      "label": "general",
+      "desc": "전체 공지 채널",
+      "access": "guest",
+      "_tip": "guest = allowedIPs 내 모든 사람"
+    },
+    {
+      "id": "dev",
+      "type": "channel",
+      "label": "dev",
+      "desc": "개발팀 채널",
+      "access": ["team-dev"]
+    },
+    {
+      "id": "design",
+      "type": "channel",
+      "label": "design",
+      "desc": "디자인팀 채널",
+      "access": ["team-design"]
+    },
+    {
+      "id": "dev-design",
+      "type": "channel",
+      "label": "dev+design",
+      "desc": "개발+디자인 공동 채널",
+      "access": ["team-dev", "team-design"],
+      "_tip": "배열로 지정하면 해당 그룹 중 하나 이상 소속이면 접근 가능"
+    },
+    {
+      "id": "admin-only",
+      "type": "channel",
+      "label": "admin",
+      "desc": "관리자 전용 채널",
+      "access": "admin",
+      "_tip": "admin 그룹만 접근 가능"
+    },
+    {
+      "id": "me",
+      "type": "dm",
+      "label": "나에게 메모",
+      "desc": "본인만 볼 수 있는 개인 채널",
+      "access": "private",
+      "_tip": "private = 모두 접근 가능하지만 본인 메시지만 조회"
+    }
   ],
 
   "profiles": {
     "127.0.0.1": {
       "name": "localhost",
       "avatar": null
-    }	
+    }
   },
 
-  "channels": [
-    { "id": "general", "type": "channel", "label": "일반", "desc": "일반 채팅" },
-    { "id": "todo",    "type": "channel", "label": "TO-DO", "desc": "TO-DO 리스트" },
-    { "id": "files",   "type": "channel", "label": "파일", "desc": "파일 전용 채널" },
-    { "id": "spam",    "type": "channel", "label": "spam", "desc": "아무거나 막 보내 보아요" }
-  ],
+  "allowedReactions": ["⭕", "❌", "✅", "👍", "👎", "❤️", "😂", "🔥"],
 
   "port": 3000,
-  "fileSizeLimitMB": 10000,
+  "fileSizeLimitMB": 100,
 
-  "_tip_allowedIPs": [
-    "지원 형식:",
-    "  단일 IP     : '192.168.1.10'",
-    "  와일드카드  : '192.168.1.*'  또는  '192.168.*.*'",
-    "  범위        : '192.168.1.100-200'  (마지막 옥텟)",
-    "  콤마 목록   : '10.0.0.1,10.0.0.2,10.0.0.5'",
-    "  조합 가능   : '192.168.1.50-100,192.168.2.*'"
-  ],
-  "_tip_profiles": [
-    "profiles 형식: { 'IP': { name, avatar } }",
-    "  avatar: null 이면 이니셜 표시, 경로/URL이면 이미지 표시",
-    "  avatar 이미지는 uploads/ 폴더에 넣고 '/uploads/파일명' 으로 지정"
-  ]
+  "_tip_groups": {
+    "desc": "그룹 정의. admin 그룹은 모든 채널에 자동 접근.",
+    "ip_formats": "단일 IP, 와일드카드(192.168.*.*), 범위(192.168.1.10-30), 콤마목록(10.0.0.1,10.0.0.2)"
+  },
+  "_tip_allowedReactions": "리액션으로 사용할 이모지 목록. 이모지는 어떤 것이든 사용 가능합니다.",
+  "_tip_channels_access": {
+    "guest":   "allowedIPs 내 모든 사용자",
+    "private": "모든 사용자 접근 가능, 단 본인 메시지만 표시 (개인 채널)",
+    "admin":   "admin 그룹만 접근",
+    "grp-id":  "해당 그룹 ID만 접근",
+    "array":   "['grp-a','grp-b'] 배열 지정 시 해당 그룹 중 하나 이상이면 접근"
+  }
 }
