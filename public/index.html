@@ -143,22 +143,18 @@
 }
 
 /* ── 작성자명 색상 ──
-   문제 원인: CSS 변수(--msg-me-color)는 DOM 트리 전체에 상속되므로
-   msg-content의 형제인 msg-meta 안의 msg-author에도
-   color:var(--ip-color)의 fallback/계산값에 영향을 줄 수 있음.
-   해결: msg-author에 !important로 명시적 색상 강제 */
+   JS에서 authorEl.style.color = color 로 inline style 직접 설정.
+   bubble 테마의 내 말풍선에서는 CSS !important로 accent 색 강제.
+   (inline style은 specificity 최고지만 !important에는 짐) */
 
-/* void 테마: ip-color 사용 */
-.msg-author { color: var(--ip-color, var(--accent)) !important; }
+/* office 라이트: 상대방 이름 → 진한 색 (inline style 덮어씌움) */
+[data-theme="office"] .msg-author { color: var(--text-0) !important; }
 
-/* office 라이트: 상대방 이름 → 진한 색 고정 */
-[data-theme="office"] .msg-author { color: var(--ip-color, var(--text-0)) !important; }
-
-/* bubble 테마 내 말풍선: msg-content가 흰색이지만 meta는 바깥이므로 ip-color 유지 */
-/* → !important로 상속된 흰색 차단 (선택자 specificity 강제 우선) */
+/* bubble 테마 내 말풍선 위 이름: accent 색으로 고정
+   (흰색 inline style이 설정돼도 !important가 이김) */
 [data-theme="claude"] .msg-group[data-mine] .msg-author,
 [data-theme="office"] .msg-group[data-mine] .msg-author {
-  color: var(--ip-color, var(--accent)) !important;
+  color: var(--accent) !important;
 }
 
 /* ── OFFICE: 사이드바 어두운 패널 ── */
@@ -356,7 +352,7 @@ body.shift-held .msg-group:hover .msg-actions{ display:none; }
 .msg-avatar{width:34px;height:34px;border-radius:50%;flex-shrink:0;margin-top:2px;display:flex;align-items:center;justify-content:center;font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:500;background:var(--bg-3);cursor:default;user-select:none;overflow:hidden;}
 .msg-body{flex:1;min-width:0;}
 .msg-meta{display:flex;align-items:baseline;gap:8px;margin-bottom:3px;}
-.msg-author{font-size:12.5px;font-weight:600;font-family:'IBM Plex Mono',monospace;color:var(--ip-color,var(--accent));}
+.msg-author{font-size:12.5px;font-weight:600;font-family:'IBM Plex Mono',monospace;}
 /* 시간 — 이전 #50506a → 지금 var(--text-2) = #7878a0 로 훨씬 밝게 */
 .msg-time{font-size:11px;color:var(--text-2);font-family:'IBM Plex Mono',monospace;}
 
@@ -912,7 +908,7 @@ function buildMsgEl(msg) {
   // inline style 대신 CSS custom property로 색 전달
   // → CSS에서 .msg-author { color: var(--ip-color) } 로 사용
   // → bubble 테마에서는 CSS !important로 덮어씌울 수 있음
-  authorEl.style.setProperty('--ip-color', color);
+  authorEl.style.color = color;  // inline style 직접 설정 (CSS 변수 방식 대비 확실)
   authorEl.textContent = name;
   authorEl.title = name !== msg.author ? msg.author : '';
   
@@ -939,22 +935,11 @@ function buildMsgEl(msg) {
 
   group.appendChild(body);
 
-  // 액션 툴바 (리액션 버튼 3개 + 삭제 버튼)
+  // 액션 툴바 — hover 시점에 동적 생성 (allowedReactions 타이밍 문제 해결)
   const actions = document.createElement('div');
   actions.className = 'msg-actions';
 
-  allowedReactions.forEach(emoji => {
-    const btn = document.createElement('button');
-    btn.className = 'msg-act-btn';
-    btn.textContent = emoji;
-    btn.title = `${emoji} 리액션`;
-    btn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      toggleReaction(msg.id, emoji);
-    });
-    actions.appendChild(btn);
-  });
-
+  // 삭제 버튼 고정
   const delBtn = document.createElement('button');
   delBtn.className = 'msg-act-btn del-btn';
   delBtn.textContent = '🗑';
@@ -964,6 +949,22 @@ function buildMsgEl(msg) {
     deleteMessage(msg.id, group);
   });
   actions.appendChild(delBtn);
+
+  // 리액션 버튼: mouseenter 시점에 allowedReactions 최신값으로 동적 생성
+  group.addEventListener('mouseenter', () => {
+    actions.querySelectorAll('.msg-act-btn:not(.del-btn)').forEach(b => b.remove());
+    [...allowedReactions].reverse().forEach(emoji => {
+      const btn = document.createElement('button');
+      btn.className = 'msg-act-btn';
+      btn.textContent = emoji;
+      btn.title = `${emoji} 리액션`;
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        toggleReaction(msg.id, emoji);
+      });
+      actions.insertBefore(btn, actions.firstChild);
+    });
+  });
 
   group.appendChild(actions);
   return group;
